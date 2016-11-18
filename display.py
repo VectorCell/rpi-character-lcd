@@ -26,8 +26,7 @@ DEGREE      = (14, 10, 14, 0, 0, 0, 0, 0)
 FILL        = (31, 31, 31, 31, 31, 31, 31, 31)
 
 
-def exit_gracefully(lcd):
-    print('exiting gracefully ...')
+def exit_blank(lcd):
     lcd.create_char(1, (31, 31, 31, 31, 31, 31, 31, 31))
     lcd.clear()
     lcd.message(('\x01' * 16) + '\n' + ('\x01' * 16))
@@ -37,7 +36,7 @@ def exit_gracefully(lcd):
 
 def get_sighandler(lcd):
     def sighandler(signal, frame):
-        exit_gracefully(lcd)
+        exit_blank(lcd)
     return sighandler
 
 
@@ -61,8 +60,6 @@ def main():
 
     # Initialize the LCD using the pins
     lcd = LCD.Adafruit_CharLCDPlate()
-
-    print('Press Ctrl-C to quit.')
     signal.signal(signal.SIGINT, get_sighandler(lcd))
 
     # create some custom characters
@@ -78,7 +75,6 @@ def main():
         print(lines)
         lcd.message(lines[-2] + '\n' + lines[-1])
 
-    #exit_gracefully(lcd)
 
 if __name__ =='__main__':
     main()
