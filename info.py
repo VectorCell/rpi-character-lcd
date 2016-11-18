@@ -2,8 +2,13 @@
 
 
 import sys
+import os
+import signal
 import time
 import urllib.request
+
+
+finished = False
 
 
 WEATHER_URL_AUSTIN = "http://forecast.weather.gov/MapClick.php?lat=30.349290869878814&lon=-97.77015612070767#.WC7jTbWVsTs"
@@ -32,8 +37,16 @@ def emit_weather():
     print(flush=True)
 
 
+def get_sighandler():
+    def sighandler(signal, frame):
+        finished = True
+        sys.exit(0)
+    return sighandler
+
+
 def main():
-    while True:
+    signal.signal(signal.SIGINT, get_sighandler())
+    while not finished:
         emit_weather()
         time.sleep(60.0)
 

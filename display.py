@@ -2,8 +2,13 @@
 
 import signal
 import sys
+import os
 import time
+import threading
 import Adafruit_CharLCD as LCD
+
+
+main_finished = False
 
 
 RED     = (1.0, 0.0, 0.0)
@@ -40,27 +45,37 @@ def get_sighandler(lcd):
     return sighandler
 
 
-def button_listener():
-    buttons = ( (LCD.SELECT, 'Select', (1,1,1)),
-                (LCD.LEFT,   'Left'  , (1,0,0)),
-                (LCD.UP,     'Up'    , (0,0,1)),
-                (LCD.DOWN,   'Down'  , (0,1,0)),
-                (LCD.RIGHT,  'Right' , (1,0,1)) )
-    while True:
-        # Loop through each button and check if it is pressed.
-        for button in buttons:
-            if lcd.is_pressed(button[0]):
-                # Button is pressed, change the message and backlight.
-                lcd.clear()
-                lcd.message(button[1])
-                lcd.set_color(button[2][0], button[2][1], button[2][2])
+def get_button_listener(lcd):
+    def button_listener():
+        colors = (RED, GREEN, BLUE, YELLOW, CYAN, MAGENTA, WHITE, BLACK)
+        index = 0
+        buttons = ( (LCD.SELECT, 'Select', (1,1,1)),
+                    (LCD.LEFT,   'Left'  , (1,0,0)),
+                    (LCD.UP,     'Up'    , (0,0,1)),
+                    (LCD.DOWN,   'Down'  , (0,1,0)),
+                    (LCD.RIGHT,  'Right' , (1,0,1)) )
+        while not main_finished:
+            # Loop through each button and check if it is pressed.
+            for button in buttons:
+                if lcd.is_pressed(button[0]):
+                    lcd.set_color(*colors[index])
+                    index += 1
+                    if index == len(colors):
+                        index = 0
+                    time.sleep(0.25)
+    return button_listener
 
 
 def main():
 
+    global main_finished
+
     # Initialize the LCD using the pins
     lcd = LCD.Adafruit_CharLCDPlate()
+    lcd.set_color(*RED)
     signal.signal(signal.SIGINT, get_sighandler(lcd))
+
+    threading.Thread(target=get_button_listener(lcd)).start()
 
     # create some custom characters
     lcd.create_char(1, DEGREE)
@@ -75,6 +90,8 @@ def main():
         lcd.clear()
         lines = [lines[1], str(line[0:16])]
         lcd.message(lines[-2] + '\n' + lines[-1])
+
+    main_finished = True
 
 
 if __name__ =='__main__':
