@@ -11,4 +11,6 @@ Displays input from stdin, line by line (only the first 16 characters of each li
 
 Outputs text to stdout, meant to be piped to ```display.py```
 
+#### ```run.sh```
 
+Use to run the program on the display.

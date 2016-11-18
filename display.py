@@ -69,10 +69,11 @@ def main():
     lines = ['', '']
     lcd.clear()
     for line in sys.stdin:
-        line = line.rstrip().replace('°', '\x01')
+        line = line.rstrip()
+        line = line.replace('&deg;', '°')
+        line = line.replace('°', '\x01')
         lcd.clear()
         lines = [lines[1], str(line[0:16])]
-        print(lines)
         lcd.message(lines[-2] + '\n' + lines[-1])
 
 
