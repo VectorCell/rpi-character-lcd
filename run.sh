@@ -1,3 +1,3 @@
 #!/bin/bash
 
-./info.py | sudo ./display.py
+sudo ./menu.py
