@@ -8,9 +8,6 @@ import threading
 import Adafruit_CharLCD as LCD
 
 
-main_finished = False
-
-
 RED     = (1.0, 0.0, 0.0)
 GREEN   = (0.0, 1.0, 0.0)
 BLUE    = (0.0, 0.0, 1.0)
@@ -41,57 +38,58 @@ def exit_blank(lcd):
 
 def get_sighandler(lcd):
     def sighandler(signal, frame):
-        exit_blank(lcd)
+        sys.exit(0)
     return sighandler
 
 
-def get_button_listener(lcd):
-    def button_listener():
-        colors = (RED, GREEN, BLUE, YELLOW, CYAN, MAGENTA, WHITE, BLACK)
-        index = 0
-        buttons = ( (LCD.SELECT, 'Select', (1,1,1)),
-                    (LCD.LEFT,   'Left'  , (1,0,0)),
-                    (LCD.UP,     'Up'    , (0,0,1)),
-                    (LCD.DOWN,   'Down'  , (0,1,0)),
-                    (LCD.RIGHT,  'Right' , (1,0,1)) )
-        while not main_finished:
-            # Loop through each button and check if it is pressed.
-            for button in buttons:
-                if lcd.is_pressed(button[0]):
-                    lcd.set_color(*colors[index])
-                    index += 1
-                    if index == len(colors):
-                        index = 0
-                    time.sleep(0.25)
-    return button_listener
+def reform_line(line):
+    line = line.rstrip()
+    line = line.replace('&deg;', '°')
+    line = line.replace('°', '\x01')
+    if len(line) < 16:
+        line += ' ' * (16 - len(line))
+    elif len(line) > 16:
+        line = line[:16]
+    return line
 
 
 def main():
 
-    global main_finished
+    # number of lines to read at a time (2 is faster)
+    n_feed_lines = 1
+    for arg in sys.argv:
+        if arg == '-2':
+            n_feed_lines = 2
 
     # Initialize the LCD using the pins
     lcd = LCD.Adafruit_CharLCDPlate()
     lcd.set_color(*RED)
-    signal.signal(signal.SIGINT, get_sighandler(lcd))
+    lcd.clear()
 
-    threading.Thread(target=get_button_listener(lcd)).start()
+    signal.signal(signal.SIGINT, get_sighandler(lcd))
 
     # create some custom characters
     lcd.create_char(1, DEGREE)
-    lcd.create_char(2, FILL)
 
-    lines = ['', '']
-    lcd.clear()
-    for line in sys.stdin:
-        line = line.rstrip()
-        line = line.replace('&deg;', '°')
-        line = line.replace('°', '\x01')
-        lcd.clear()
-        lines = [lines[1], str(line[0:16])]
-        lcd.message(lines[-2] + '\n' + lines[-1])
-
-    main_finished = True
+    if n_feed_lines == 1:
+        lines = ['', '']
+        for line in sys.stdin:
+            line = reform_line(line)
+            lines = [lines[1], line]
+            lcd.clear()
+            lcd.message(lines[-2] + '\n' + lines[-1])
+    elif n_feed_lines == 2:
+        buf = ['', '']
+        buf_full = True
+        for line in sys.stdin:
+            if buf_full:
+                buf[0] = reform_line(line)
+                buf_full = False
+            else:
+                buf[1] = reform_line(line)
+                buf_full = True
+                lcd.clear()
+                lcd.message('\n'.join(buf))
 
 
 if __name__ =='__main__':

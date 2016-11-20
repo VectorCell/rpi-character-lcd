@@ -79,8 +79,8 @@ class ModuleWeather(Module):
         self.visible = False
 
     def __need_update(self):
-        # every hour
-        return self.visible and (not self.cache or (int(time.time()) > (self.last_update + 60 * 60)))
+        # every 15 minutes
+        return self.visible and (not self.cache or (int(time.time()) > (self.last_update + 15 * 60)))
 
     def update(self):
         if self.__need_update():
