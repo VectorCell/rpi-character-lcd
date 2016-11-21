@@ -130,12 +130,17 @@ class ModuleTime(Module):
         self.visible = False
 
     def __need_update(self):
-        # every minute
-        return self.visible and (not self.cache or (int(time.time()) > (self.last_update)))
+        # always
+        return True
+        # every second
+        #return self.visible and (not self.cache or (int(time.time()) > (self.last_update)))
 
     def update(self):
         if self.__need_update():
-            self.cache = time.strftime('%Y %b %d, %a\n%-I:%M:%S %p')
+            new = time.strftime('%Y %b %d, %a\n%-I:%M:%S %p')
+            if new == self.cache:
+                return False
+            self.cache = new
             self.last_update = int(time.time())
             return True
         return False
