@@ -53,6 +53,23 @@ def reform_line(line):
     return line
 
 
+def process_cmd(lcd, line, lines):
+    line = line.strip()
+    if line.startswith('cmd.'):
+        cmd = line[len('cmd.'):]
+        if cmd.startswith('color.'):
+            color = cmd[len('color.'):].upper()
+            lcd.set_color(*globals()[color])
+        elif cmd == 'clear':
+            for i in range(len(lines)):
+                lines[i] = ''
+            lcd.clear()
+        elif cmd == 'exit':
+            sys.exit(0)
+        return True
+    return False
+
+
 def main():
 
     # number of lines to read at a time (2 is faster)
@@ -74,22 +91,24 @@ def main():
     if n_feed_lines == 1:
         lines = ['', '']
         for line in sys.stdin:
-            line = reform_line(line)
-            lines = [lines[1], line]
-            lcd.clear()
-            lcd.message(lines[-2] + '\n' + lines[-1])
+            if not process_cmd(lcd, line, lines):
+                line = reform_line(line)
+                lines = [lines[1], line]
+                lcd.clear()
+                lcd.message(lines[-2] + '\n' + lines[-1])
     elif n_feed_lines == 2:
         buf = ['', '']
         buf_full = True
         for line in sys.stdin:
-            if buf_full:
-                buf[0] = reform_line(line)
-                buf_full = False
-            else:
-                buf[1] = reform_line(line)
-                buf_full = True
-                lcd.clear()
-                lcd.message('\n'.join(buf))
+            if not process_cmd(lcd, line, lines):
+                if buf_full:
+                    buf[0] = reform_line(line)
+                    buf_full = False
+                else:
+                    buf[1] = reform_line(line)
+                    buf_full = True
+                    lcd.clear()
+                    lcd.message('\n'.join(buf))
 
 
 if __name__ =='__main__':
