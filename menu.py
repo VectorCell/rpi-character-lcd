@@ -3,6 +3,7 @@
 import signal
 import sys
 import os
+import subprocess
 import time
 import datetime
 import string
@@ -70,6 +71,16 @@ def printlog(*t, **d):
     print(*tcopy, **d)
 
 
+def run_command(cmd):
+    #output = 'dummy data'
+    if cmd.startswith('./'):
+        print('converting {} to '.format(cmd), end = '')
+        cmd = os.path.dirname(os.path.realpath(__file__)) + cmd[1:]
+        print(cmd)
+    output = subprocess.getoutput(cmd)
+    return output
+
+
 class Module:
 
     def __init__(self, lcd):
@@ -134,7 +145,7 @@ class ModuleTimeNoSeconds(Module):
 
     def __need_update(self):
         # every minute
-        return self.visible and (not self.cache or (int(time.time()) > (self.last_update + 60)))
+        return self.visible and (not self.cache or (int(time.time()) >= (self.last_update + 60)))
 
     def update(self, force = False):
         if self.__need_update() or force:
@@ -171,7 +182,7 @@ class ModuleWeather(Module):
 
     def __need_update(self):
         # every 15 minutes
-        return self.visible and (not self.cache or (int(time.time()) > (self.last_update + 15 * 60)))
+        return self.visible and (not self.cache or (int(time.time()) >= (self.last_update + 15 * 60)))
 
     def update(self, force = False):
         if self.__need_update() or force:
@@ -215,6 +226,54 @@ class ModuleWeather(Module):
         self.visible = False
 
 
+class ModuleTemperature(Module):
+
+    def __init__(self, lcd):
+        self.lcd = lcd
+        self.cache = None
+        self.last_update = 0
+        self.visible = False
+
+    def __need_update(self):
+        # every 60 seconds
+        return self.visible and (not self.cache or (int(time.time()) >= (self.last_update + 60)))
+
+    def update(self, force = False):
+        if self.__need_update() or force:
+            #self.lcd.clear()
+            ##self.lcd.set_color(*YELLOW)
+            #self.lcd.message('LOADING \nTEMPERATURE')
+            output = run_command('./read_dht11')
+            output = output.replace('&deg;', '°').replace('°', '\x01')
+            output = output.replace(' \x01', '\x01')
+            output = output.replace(' %', '%')
+            output = output.replace('relative ', '')
+            lines = output.split('\n')
+            temps = lines[0].replace('(', '').replace(')', '').split(' ')
+            tempc = temps[0]
+            tempf = temps[1]
+            humidity = lines[1]
+            output = tempf + ' ' + tempc + '\n' + humidity
+            printlog(output)
+            self.cache = output
+            self.last_update = int(time.time())
+            return True
+        return False
+
+    def show(self):
+        if not self.visible:
+            printlog('show temperature')
+            self.lcd.clear()
+            self.visible = True
+        self.update()
+        #self.lcd.set_color(*GREEN)
+        self.lcd.clear()
+        self.lcd.message(self.cache)
+
+    def hide(self):
+        self.visible = False
+
+
 def main():
 
     # Initialize the LCD using the pins
@@ -229,8 +288,8 @@ def main():
     colors = (RED, GREEN, BLUE, YELLOW, CYAN, MAGENTA, WHITE, BLACK)
     color_idx = 0
 
-    modules = (ModuleTime(lcd), ModuleTimeNoSeconds(lcd), ModuleWeather(lcd))
-    mod_idx = 1
+    modules = (ModuleTime(lcd), ModuleTimeNoSeconds(lcd), ModuleWeather(lcd), ModuleTemperature(lcd))
+    mod_idx = 3
     stopped = False
     force_update = False
     delay = 0.1
