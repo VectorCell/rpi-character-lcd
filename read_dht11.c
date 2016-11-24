@@ -1,7 +1,9 @@
 /*
- * power-relays.c
- *
- * This is the old version. The new version is in power-relays.cc
+ * read_dht11.c
+ * 
+ * adapted from code from
+ * http://www.circuitbasics.com/how-to-set-up-the-dht11-humidity-sensor-on-the-raspberry-pi/
+ * 
  */
 
 #include <stdlib.h>
@@ -13,7 +15,7 @@
 #define P_DATA      0
 #define MAXTIMINGS 85
 
-bool read_dht11_dat (int *data)
+bool read_dht11_dat (int data[5])
 {
 	uint8_t laststate	= HIGH;
 	uint8_t counter		= 0;
@@ -67,13 +69,11 @@ int main (int argc, char *argv[])
 
 	int data[5] = {0, 0, 0, 0, 0};
 	while (!read_dht11_dat(data)) {
-		//printf("unsuccessful read, trying again ...\n");
+		// unsuccessful read, trying again
 		delay(10);
 	}
 
 	float f = data[2] * 9. / 5. + 32;
-	//printf( "Humidity = %d.%d %% Temperature = %d.%d C (%.1f F)\n",
-	//	data[0], data[1], data[2], data[3], f );
 	printf("%d.%d °C (%.1f °F)\n", data[2], data[3], f);
 	printf("%d.%d %% relative humidity\n", data[0], data[1]);
 
