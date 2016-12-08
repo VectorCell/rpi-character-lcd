@@ -14,6 +14,9 @@ import Adafruit_CharLCD as LCD
 main_finished = False
 
 
+WEATHER_UPDATE_INTERVAL = (15 * 60) # 15 minutes
+
+
 RED     = (1.0, 0.0, 0.0)
 GREEN   = (0.0, 1.0, 0.0)
 BLUE    = (0.0, 0.0, 1.0)
@@ -49,7 +52,11 @@ def exit_blank(lcd):
 
 
 def get_sighandler(lcd):
-    def sighandler(signal, frame):
+    def sighandler(sig, frame):
+        if sig == signal.SIGINT:
+            printlog('recieved SIGINT')
+        elif sig == signal.SIGTERM:
+            printlog('recieved SIGTERM')
         exit_blank(lcd)
     return sighandler
 
@@ -74,11 +81,61 @@ def printlog(*t, **d):
 def run_command(cmd):
     #output = 'dummy data'
     if cmd.startswith('./'):
-        print('converting {} to '.format(cmd), end = '')
+        #printlog('converting command {} to '.format(cmd), end = '')
         cmd = os.path.dirname(os.path.realpath(__file__)) + cmd[1:]
-        print(cmd)
+        #printlog(cmd)
     output = subprocess.getoutput(cmd)
     return output
+
+
+def get_weather(lon = '-97.74928981475828', lat = '30.35843540042552'):
+    try:
+        lonf = float(lon)
+        latf = float(lat)
+        url = 'http://forecast.weather.gov/MapClick.php?lon={}&lat={}'.format(lon, lat)
+        #printlog('fetching weather with url: ' + url)
+        temperatures = []
+        conditions = []
+        def isolate_text(line):
+            line = line[line.index('>') + 1:]
+            line = line[:line.index('<')]
+            return line
+        f = urllib.request.urlopen(url, timeout = 10)
+        for line in f.read().decode('utf-8').splitlines():
+            if 'myforecast-current-lrg' in line:
+                tempf = isolate_text(line)
+            elif 'myforecast-current-sm' in line:
+                tempc = isolate_text(line)
+            elif 'myforecast-current' in line:
+                condition = isolate_text(line)
+        return {
+            'valid': True,
+            'tempc': int(tempc[:tempc.index('&')]),
+            'tempf': int(tempf[:tempf.index('&')]),
+            'condition': condition
+        }
+    except (AttributeError, TypeError):
+        raise AssertionError('input variables must be floating-point numbers (longitude and latitude)')
+    except Exception:
+        return {
+            'valid': False
+        }
+
+def get_temperature():
+    output = run_command('./read_dht11')
+    lines = output.replace('(', '').replace(')', '').split('\n')
+    temps = lines[0].split(' ')
+    for i in range(len(temps)):
+        if temps[i] == '°C':
+            tempc = temps[i - 1]
+        elif temps[i] == '°F':
+            tempf = temps[i - 1]
+    humidity = lines[1].split(' ')[0]
+    return {
+        'tempf': round(float(tempf)),
+        'tempc': int(float(tempc)),
+        'humidity': int(float(humidity))
+    }
 
 
 class Module:
@@ -175,37 +232,26 @@ class ModuleWeather(Module):
 
     def __init__(self, lcd):
         self.lcd = lcd
-        self.url = "http://forecast.weather.gov/MapClick.php?lon=-97.74928981475828&lat=30.35843540042552#.WC_tULWVsTs"
+        self.lon = -97.74928981475828
+        self.lat = 30.35843540042552
         self.cache = None
         self.last_update = 0
         self.visible = False
 
     def __need_update(self):
         # every 15 minutes
-        return self.visible and (not self.cache or (int(time.time()) >= (self.last_update + 15 * 60)))
+        return self.visible and (not self.cache or (int(time.time()) >= (self.last_update + WEATHER_UPDATE_INTERVAL)))
 
     def update(self, force = False):
         if self.__need_update() or force:
             self.lcd.clear()
             #self.lcd.set_color(*YELLOW)
             self.lcd.message('LOADING WEATHER')
-            temperatures = []
-            conditions = []
-            def isolate_text(line):
-                line = line[line.index('>') + 1:]
-                line = line[:line.index('<')]
-                return line
-            f = urllib.request.urlopen(self.url)
-            for line in f.read().decode('utf-8').splitlines():
-                if 'myforecast-current-lrg' in line:
-                    temperatures += [isolate_text(line)]
-                elif 'myforecast-current-sm' in line:
-                    temperatures += [isolate_text(line)]
-                elif 'myforecast-current' in line:
-                    conditions += [isolate_text(line)]
-            output = '\n'.join((' '.join(temperatures).strip(), ' '.join(conditions).strip()))
-            output = ''.join(c for c in output if c in string.printable)
-            output = output.replace('&deg;', '°').replace('°', '\x01')
+            weather = get_weather(self.lon, self.lat)
+            if weather['valid']:
+                output = '{}\x01F {}\x01C\n{}'.format(weather['tempf'], weather['tempc'], weather['condition'])
+            else:
+                output = 'unable to load\nweather data'
             printlog(output)
             self.cache = output
             self.last_update = int(time.time())
@@ -243,17 +289,8 @@ class ModuleTemperature(Module):
             #self.lcd.clear()
             ##self.lcd.set_color(*YELLOW)
             #self.lcd.message('LOADING \nTEMPERATURE')
-            output = run_command('./read_dht11')
-            output = output.replace('&deg;', '°').replace('°', '\x01')
-            output = output.replace(' \x01', '\x01')
-            output = output.replace(' %', '%')
-            output = output.replace('relative ', '')
-            lines = output.split('\n')
-            temps = lines[0].replace('(', '').replace(')', '').split(' ')
-            tempc = temps[0]
-            tempf = temps[1]
-            humidity = lines[1]
-            output = tempf + ' ' + tempc + '\n' + humidity
+            env = get_temperature()
+            output = '{}\x01F {}\x01C\n{}% humidity'.format(env['tempf'], env['tempc'], env['humidity'])
             printlog(output)
             self.cache = output
             self.last_update = int(time.time())
@@ -274,12 +311,70 @@ class ModuleTemperature(Module):
         self.visible = False
 
 
+class ModuleQuick(Module):
+
+    def __init__(self, lcd):
+        self.lcd = lcd
+        self.cache = None
+        self.cache_time = None
+        self.cache_weather = None
+        self.cache_temp = None
+        self.last_update = 0
+        self.visible = False
+
+    def __need_update(self):
+        # every 15 seconds
+        return self.visible and (not self.cache or (int(time.time()) >= (self.last_update + 15)))
+
+    def update(self, force = False):
+        if self.__need_update() or force:
+
+            timef = time.strftime('%a %m/%d %-I:%M') + time.strftime('%p').lower()
+
+            self.cache_temp = get_temperature()['tempf']
+
+            if not self.cache_weather or (int(time.time()) >= (self.last_update_weather + WEATHER_UPDATE_INTERVAL)):
+                printlog('updating weather information')
+                self.lcd.clear()
+                self.lcd.message('LOADING WEATHER')
+                weather = get_weather()
+                if weather['valid']:
+                    self.cache_weather = weather['tempf']
+                    self.last_update_weather = int(time.time())
+                else:
+                    self.cache_weather = '??'
+
+            output = '{}\n{}\x01F ({}\x01F out)'.format(timef, self.cache_temp, self.cache_weather)
+
+            self.last_update = int(time.time())
+            if self.cache == output:
+                return False
+            self.cache = output
+            printlog(self.cache)
+            return True
+        return False
+
+    def show(self):
+        if not self.visible:
+            printlog('show quick')
+            self.lcd.clear()
+            self.visible = True
+        self.update()
+        self.lcd.home()
+        self.lcd.message(self.cache)
+
+    def hide(self):
+        self.visible = False
+
+
 def main():
 
     # Initialize the LCD using the pins
+    printlog('initializing LCD')
     lcd = LCD.Adafruit_CharLCDPlate()
     lcd.set_color(*RED)
     signal.signal(signal.SIGINT, get_sighandler(lcd))
+    signal.signal(signal.SIGTERM, get_sighandler(lcd))
 
     # create some custom characters
     lcd.create_char(1, DEGREE)
@@ -288,8 +383,8 @@ def main():
     colors = (RED, GREEN, BLUE, YELLOW, CYAN, MAGENTA, WHITE, BLACK)
     color_idx = 0
 
-    modules = (ModuleTime(lcd), ModuleTimeNoSeconds(lcd), ModuleWeather(lcd), ModuleTemperature(lcd))
-    mod_idx = 3
+    modules = (ModuleTime(lcd), ModuleTimeNoSeconds(lcd), ModuleWeather(lcd), ModuleTemperature(lcd), ModuleQuick(lcd))
+    mod_idx = 4
     stopped = False
     force_update = False
     delay = 0.1
