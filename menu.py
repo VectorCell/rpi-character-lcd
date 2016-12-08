@@ -122,7 +122,7 @@ def get_weather(lon = '-97.74928981475828', lat = '30.35843540042552'):
         }
 
 def get_temperature():
-    output = run_command('./read_dht11')
+    output = run_command('read_dht11')
     lines = output.replace('(', '').replace(')', '').split('\n')
     temps = lines[0].split(' ')
     for i in range(len(temps)):
